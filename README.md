@@ -1,4 +1,3 @@
 # lovesongs
-Love song classification using NLP in R
+Song classification with web scraping and NLP in R
 
-This is a line from Rstudio
