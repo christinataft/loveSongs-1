@@ -96,4 +96,4 @@ songTibble %>%
   count(song, artist) %>%
   arrange(desc(n))
 
-write_csv(songTibble, "songs_unlabelled.csv", col_names = TRUE) # Write list of songs to csv for labelling
+write_csv(songTibble, "./datasets/songs_unlabelled.csv", col_names = TRUE) # Write list of songs to csv for labelling
