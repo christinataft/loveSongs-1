@@ -6,32 +6,13 @@ songs.tibble <- read_csv("./datasets/songs_labelled.csv",  #import dataset
                   col_types = cols(
                     song = col_character(),
                     artist = col_character(),
-                    date = col_date(format = "%d/%m/%Y"),
+                    date = col_character(),
                     loveSong = col_double()
                   ))
 
 view(songs.tibble)
 
 genius_token()  # Set up genius API
-
-ScrapeLyrics <- function(song, artist) {  # Function to scrape lyrics
-  tryCatch( {
-      lyrics <- ""
-      while (lyrics == "") {
-        song.tibble <- get_lyrics_search(artist_name = artist, song_title = song)
-        lyrics <- str_c(pull(song.tibble, line), collapse = " ")  # Get just lyrics, concat into one string
-      }
-      closeAllConnections()  # Close the connection
-      return(lyrics)
-    }, 
-    error=function(cond) {
-      # If error 404 (genius can't find the lyrics), return NA
-      closeAllConnections()
-      return(NA)
-    }
-  )
-}  
-
 
 # Let's prepare the dataset for scraping (Artist and song names should fit the values on genius)
 view(songs.tibble)
@@ -48,16 +29,49 @@ songs.tibble <- songs.tibble %>%
          song = str_replace(song, ":", " "),
          song = str_remove(song, "\\(.+\\)"))
 
-songs.tibble %>% filter(str_detect(song, ":"))
+songs.tibble.lyrics <- tibble(song = 'NULL',
+                              artist = 'NULL',
+                              date = 'NULL',
+                              lyrics = 'NULL',
+                              loveSong = 0) # output
 
 
-# Start scraping!
-start <- Sys.time()
-songs.tibble.lyrics.a <- songs.tibble.a %>%
-    mutate(lyrics = map2_chr(song, artist, ScrapeLyrics))
-end <- Sys.time()
-runtime <- end-start
-# This doesnt work... taking too long. too many queries? Might be a problem with how the wrapper parses artist names - so we'll try python instead.
+#Test
+songs.tibble <- songs.tibble[1:10,]
 
-# Write to csv, fill in missing lyrics
+ScrapeLyrics <- function(song, artist) {  # Function to scrape lyrics
+  tryCatch( {
+    lyrics <- ""
+    while (lyrics == "") {
+      song.tibble <- get_lyrics_search(artist_name = artist, song_title = song)
+      lyrics <- str_c(pull(song.tibble, line), collapse = " ")  # Get just lyrics, concat into one string
+    }
+    closeAllConnections()  # Close the connection
+    return(lyrics)
+  }, 
+  error=function(cond) {
+    # If error 404 (genius can't find the lyrics), return NA
+    closeAllConnections()
+    return(NA)
+  }
+  )
+}  
+
+# scrape
+for (i in seq_along(songs.tibble)) {
+  rolling.pct <-  i / length(songs.tibble) * 100
+  cat(rolling.pct, "% is complete. ", sep='')
+  song <- songs.tibble[[i,1]]
+  artist <- songs.tibble[[i,2]]
+  
+  lyrics <- ScrapeLyrics(song, artist)
+ 
+  songs.tibble.lyrics %>% add_row(song = songs.tibble[[i,1]],
+                                  artist = songs.tibble[[i,2]],
+                                  date = songs.tibble[[i,3]],
+                                  lyrics = lyrics,
+                                  loveSong = songs.tibble[[i,4]])
+}
+
+# Some problems with this - try using python instead. 
 write_csv(songs.tibble.lyrics, "./datasets/songs_labelled_lyrics.csv", col_names = TRUE)
