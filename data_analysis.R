@@ -1,5 +1,6 @@
 library(tidyverse)
-library(lexicon)
+library(lubridate)
+library(tidytext)
 
 song.data <- read_csv("./datasets/songs_lyrics_short.csv",
                       col_names = c(
@@ -14,7 +15,7 @@ song.data <- read_csv("./datasets/songs_lyrics_short.csv",
                       col_types = cols(
                         album = col_character(),
                         chart.date = col_date("%d/%m/%Y"),
-                        love.song = col_double(),
+                        love.song = col_factor(),
                         lyrics = col_character(),
                         release.date = col_date("%d/%m/%Y"),
                         song.title = col_character(),
@@ -32,11 +33,6 @@ song.data.clean <- song.data %>%
   mutate(lyrics = str_replace_all(lyrics, "â€™", "'")) %>% 
   mutate(lyrics = str_to_lower(lyrics)) %>%
   view()
-
-# grady_augmented is a dataset containing 122,806 english words.
-
-song.data.clean %>%
-  filter(lyrics)
 
 # Function to expand contractions - Look deeper into this
 
@@ -61,5 +57,39 @@ FixContractions(song.data.clean[[6,4]])
 
 song.data.clean[[6,4]] %>%
   FixContractions() %>%
-  str_extract_all("[^ -.,!]+")
+  str_replace_all("[^a-zA-Z0-9\\- ]", " ")
 
+# remove contractions and punctuation
+song.data.clean <- song.data.clean %>%
+  mutate(lyrics = lyrics %>% FixContractions() %>% str_replace_all("[^a-zA-Z0-9\\- ]", " "))
+
+# Convert chart.dates to lubridate dates
+
+song.data.clean <- song.data.clean %>%
+  mutate(chart.date = as_date(chart.date),
+         release.date = as_date(release.date))
+
+## Exploratory data analysis
+# What percentage of songs charting each year are love songs?
+
+song.data.clean %>%
+  count(year = year(chart.date), love.song)%>%
+  ggplot(aes(year,n)) +)
+  geom_col(position = "fill", aes(fill = love.song) # Fix the date labels, change colors
+
+# Love songs by each week, zoomed in on 2010
+
+song.data.clean %>%
+  filter(year(chart.date) == 2010) %>%
+  ggplot(aes(chart.date)) +
+  geom_histogram(aes(fill = love.song), binwidth = (7)) + 
+  scale_x_date(date_labels = "%B")
+
+# Tokenization with tidy text. Now, each word is present as a row. We will use this in some models (but not all)
+song.data.tidy <- song.data.clean %>%
+  unnest_tokens(word, lyrics) %>%
+  anti_join(stop_words) %>%
+  distinct() %>%
+  filter(nchar(word) >= 3)
+
+song.data.tidy
