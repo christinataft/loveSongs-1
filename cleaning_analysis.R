@@ -73,17 +73,58 @@ song.data.clean <- song.data.clean %>%
 # What percentage of songs charting each year are love songs?
 
 song.data.clean %>%
-  count(year = year(chart.date), love.song)%>%
-  ggplot(aes(year,n)) +)
-  geom_col(position = "fill", aes(fill = love.song) # Fix the date labels, change colors
+  ggplot(aes(chart.date)) +
+  geom_histogram(position = "fill", aes(fill = love.song), bins = 10) # Fix the date labels, change colors
 
-# Love songs by each week, zoomed in on 2010
+# Amongst songs that turn out to be top 100 songs in the past decade, when are they released? and 
+# how many of them are love songs?
 
 song.data.clean %>%
-  filter(year(chart.date) == 2010) %>%
+  filter(release.date >= date("01-01-2010")) %>%
+  mutate(release.date = update(release.date, year=2010)) %>%
+  ggplot(aes(release.date)) +
+  geom_histogram(binwidth = (1)) +
+  scale_x_date(date_labels="%B", date_breaks = "1 month")
+
+song.data.clean %>%
+  filter(release.date >= date("01-01-2010")) %>%
+  mutate(release.date = update(release.date, year=2010)) %>%
+  ggplot(aes(release.date)) +
+  geom_histogram(aes(fill=love.song), binwidth = (1)) +
+  scale_x_date(date_labels="%B", date_breaks = "1 month")
+
+# Is it possible that releaseing songs at a particular time leads to them being more successful? Probably not.
+# Let's look at the dates with the most top 100 songs:
+
+hot.dates <- song.data.clean %>%
+  count(release.date) %>%
+  filter(n > 5) %>% .$release.date
+
+song.data.clean %>%
+  filter(release.date %in% hot.dates) %>% view()
+
+# We can see that they come from largely the same artists. OK, but is there a best month to release albums?
+
+song.data.clean %>%
+  filter(release.date >= date("01-01-2010")) %>%
+  mutate(release.date = update(release.date, year=2010)) %>%
+  ggplot(aes(release.date)) +
+  geom_histogram(binwidth = (30)) +
+  scale_x_date(date_labels="%B", date_breaks = "1 month")
+
+# For songs that end up charting on the top 100, is there any correlation between them being love songs and the 
+# time of the year they first become popular? 
+# Find a way to group by month!
+song.data.clean %>%
+  filter(chart.date > date("07-01-2010")) %>% # Take out the first week of jan 2010 because of "spillover from prev year" from last year
+  mutate(chart.date = update(chart.date, year=2010)) %>%
   ggplot(aes(chart.date)) +
-  geom_histogram(aes(fill = love.song), binwidth = (7)) + 
-  scale_x_date(date_labels = "%B")
+  geom_histogram(aes(fill=love.song), binwidth = (7)) +
+  scale_x_date(date_labels="%B", date_breaks = "1 month")
+
+
+# Now let's do some visualizations with the words themselves!
+
 
 # Tokenization with tidy text. Now, each word is present as a row. We will use this in some models (but not all)
 song.data.tidy <- song.data.clean %>%
