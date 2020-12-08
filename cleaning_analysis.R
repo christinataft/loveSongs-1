@@ -125,7 +125,6 @@ song.data.clean %>%
 
 # Now let's do some visualizations with the words themselves!
 
-
 # Tokenization with tidy text. Now, each word is present as a row. We will use this in some models (but not all)
 song.data.tidy <- song.data.clean %>%
   unnest_tokens(word, lyrics) %>%
@@ -133,4 +132,27 @@ song.data.tidy <- song.data.clean %>%
   distinct() %>%
   filter(nchar(word) >= 3)
 
-song.data.tidy
+# The most popular words, depending on whether they are love songs or not
+
+popular.words <- song.data.tidy %>%
+  group_by(love.song) %>%
+  count(word, love.song, sort=TRUE) %>%
+  mutate(word = reorder_within(word, n, love.song)) %>%
+  filter(rank(desc(n)) <= 20)
+
+
+popular.words %>% view()
+
+popular.words %>%
+  ggplot(aes(word, n, fill = love.song)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~love.song, scales = "free") +
+  coord_flip() +
+  scale_x_reordered() + 
+  scale_y_continuous(expand = c(0,0)) +
+  labs(y = "Total words in all songs",
+       title = "What were the most popular words in love songs and other songs?")
+
+# We see alot of words like n***a in the non-love songs - It's probably because rap music tends to be much
+# more verbose, resulting in them being overrepresented here. To compensate for this, we can instead use
+# a metric like word DENSITY per each song.
