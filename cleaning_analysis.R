@@ -31,8 +31,9 @@ song.data.clean <- song.data %>%
   mutate(lyrics = str_remove_all(lyrics, "\\[.+?\\]")) %>%
   mutate(lyrics = str_remove_all(lyrics, "\\(.+?\\)")) %>%
   mutate(lyrics = str_replace_all(lyrics, "â€™", "'")) %>% 
-  mutate(lyrics = str_to_lower(lyrics)) %>%
-  view()
+  mutate(lyrics = str_to_lower(lyrics))
+
+view(song.data.clean)
 
 # Function to expand contractions - Look deeper into this
 
@@ -156,3 +157,5 @@ popular.words %>%
 # We see alot of words like n***a in the non-love songs - It's probably because rap music tends to be much
 # more verbose, resulting in them being overrepresented here. To compensate for this, we can instead use
 # a metric like word DENSITY per each song.
+
+# Work on that next!!
