@@ -1,6 +1,7 @@
 library(tidyverse)
 library(lubridate)
 library(tidytext)
+library(lexicon)
 
 song.data <- read_csv("./datasets/songs_lyrics_short.csv",
                       col_names = c(
@@ -129,8 +130,9 @@ song.data.clean %>%
 # Tokenization with tidy text. Now, each word is present as a row. We will use this in some models (but not all)
 song.data.tidy <- song.data.clean %>%
   unnest_tokens(word, lyrics) %>%
+  filter(word %in% grady_augmented | word %in% profanity_zac_anger) %>% # Keep only words in the lexicon
   anti_join(stop_words) %>%
-  distinct() %>%
+  distinct() %>% 
   filter(nchar(word) >= 3)
 
 # The most popular words, depending on whether they are love songs or not
@@ -153,9 +155,35 @@ popular.words %>%
   scale_y_continuous(expand = c(0,0)) +
   labs(y = "Total words in all songs",
        title = "What were the most popular words in love songs and other songs?")
-
+# Wee see some patterns here which are good! Love songs tend to have fewer explicit words. 
+# However, the popular words in love songs tend to be popular in non-love songs as well.
 # We see alot of words like n***a in the non-love songs - It's probably because rap music tends to be much
 # more verbose, resulting in them being overrepresented here. To compensate for this, we can instead use
-# a metric like word DENSITY per each song.
+# a metric like word average DENSITY per each song - the number of time a word appears in a song divided 
+# by the total number of lyrics in the song
 
-# Work on that next!!
+# Find the word density of each word in its song lyrics
+word.density <- song.data.tidy %>% 
+  left_join(song.data.clean) %>%
+  mutate(total.words = str_count(lyrics, boundary("word"))) %>% 
+  mutate(density = str_count(lyrics, word)/total.words) %>%
+  select(love.song, word, density) %>%
+  group_by(word, love.song) %>% 
+  filter(n()>2) %>%
+  summarise(mean.density = mean(density))
+
+# Filter the 20 words with the highest average song density T
+# This analysis is a bit screwed up, correct it later. Maybe try combining the analyses - i.e. filter
+# out popular words first before doing the density calculation.
+word.density %>%
+  arrange(desc(mean.density)) %>%
+  group_by(love.song) %>%
+  filter(rank(desc(mean.density)) <= 20) %>%
+  ggplot(aes(word, mean.density, fill = love.song)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~love.song, scales = "free") +
+  coord_flip() +
+  scale_x_reordered() + 
+  scale_y_continuous(expand = c(0,0)) +
+  labs(y = "Average density of each word across songs",
+       title = "Which words had the highest average density in songs across song types?") #
