@@ -124,7 +124,6 @@ song.data.clean %>%
   geom_histogram(aes(fill=love.song), binwidth = (7)) +
   scale_x_date(date_labels="%B", date_breaks = "1 month")
 
-
 # Now let's do some visualizations with the words themselves!
 
 # Tokenization with tidy text. Now, each word is present as a row. We will use this in some models (but not all)
@@ -142,7 +141,6 @@ popular.words <- song.data.tidy %>%
   count(word, love.song, sort=TRUE) %>%
   mutate(word = reorder_within(word, n, love.song)) %>%
   filter(rank(desc(n)) <= 20)
-
 
 popular.words %>% view()
 
@@ -162,8 +160,12 @@ popular.words %>%
 # a metric like word average DENSITY per each song - the number of time a word appears in a song divided 
 # by the total number of lyrics in the song
 
-# Find the word density of each word in its song lyrics
-word.density <- song.data.tidy %>% 
+# Now, let's choose the most popular 100 words in each song category, and sort them by their highest average
+# density across songs.
+word.density <- song.data.tidy %>%
+  count(word, love.song) %>%
+  group_by(love.song) %>%
+  filter(rank(desc(n)) <= 100) %>% 
   left_join(song.data.clean) %>%
   mutate(total.words = str_count(lyrics, boundary("word"))) %>% 
   mutate(density = str_count(lyrics, word)/total.words) %>%
@@ -172,13 +174,11 @@ word.density <- song.data.tidy %>%
   filter(n()>2) %>%
   summarise(mean.density = mean(density))
 
-# Filter the 20 words with the highest average song density T
-# This analysis is a bit screwed up, correct it later. Maybe try combining the analyses - i.e. filter
-# out popular words first before doing the density calculation.
 word.density %>%
   arrange(desc(mean.density)) %>%
   group_by(love.song) %>%
   filter(rank(desc(mean.density)) <= 20) %>%
+  mutate(word = reorder_within(word, mean.density, love.song)) %>%
   ggplot(aes(word, mean.density, fill = love.song)) +
   geom_col(show.legend = FALSE) +
   facet_wrap(~love.song, scales = "free") +
@@ -186,4 +186,59 @@ word.density %>%
   scale_x_reordered() + 
   scale_y_continuous(expand = c(0,0)) +
   labs(y = "Average density of each word across songs",
-       title = "Which words had the highest average density in songs across song types?") #
+       title = "Which words had the highest average density in songs across song types?") 
+# We see roughly the same patterns as before. 
+
+# Previously, we removed stop words from our dataset and then used term frequency/density as a measure
+# of how significant these words are. A more sophisticated approach is to use TF-IDF
+# This is term frequency (how often a word appears in a song) divided by document frequency 
+# (how many songs the word is in). Ths assumption is that terms that appear more frequently in
+# a document should be given higher weight, unless they also appear in many documents.
+
+tfidf.words <- song.data.clean %>%
+  unnest_tokens(word, lyrics) %>%
+  distinct() %>%
+  filter(word %in% grady_augmented | word %in% profanity_zac_anger) %>% # Keep only words in the lexicon
+  filter(nchar(word)>3) %>%
+  count(love.song, word, sort=TRUE) %>% 
+  ungroup() %>%
+  bind_tf_idf(word, love.song, n)
+# We see that idf and tf-idf are 0 for extremely common words.
+# Now, let's plot important words using TF-IDF by song type
+tfidf.words %>% 
+  arrange(desc(tf_idf)) %>%
+  group_by(love.song) %>%
+  filter(rank(desc(tf_idf)) <= 20) %>%
+  mutate(word = reorder_within(word, tf_idf, love.song)) %>%
+  ggplot(aes(word, tf_idf, fill=love.song)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~love.song, scales="free") +
+  coord_flip() + 
+  scale_x_reordered() + 
+  scale_y_continuous(expand = c(0,0)) +
+  labs(title = "Important words using TF-IDF by song type?")
+
+# We can also look at how important words have changed over the years
+tfidf.words.yearly <- song.data.clean %>%
+  mutate(year = year(chart.date)) %>%
+  unnest_tokens(word, lyrics) %>%
+  distinct() %>%
+  filter(word %in% grady_augmented | word %in% profanity_zac_anger) %>% # Keep only words in the lexicon
+  filter(nchar(word)>3) %>%
+  count(year, word, sort=TRUE) %>% 
+  ungroup() %>%
+  bind_tf_idf(word, year, n)
+
+tfidf.words.yearly %>%
+  group_by(year) %>%
+  filter(rank(desc(tf_idf)) <= 20) %>%
+  mutate(word = reorder_within(word, tf_idf, year)) %>%
+  ggplot(aes(word, tf_idf, fill=year)) + 
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~year, ncol=5, scales = "free") +
+  coord_flip() +
+  scale_x_reordered() +
+  labs(x=NULL)
+
+# Not very useful, but quite interesting to see that 'pandemic' is the most significant word of 2020.
+
