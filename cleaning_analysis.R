@@ -241,4 +241,3 @@ tfidf.words.yearly %>%
   labs(x=NULL)
 
 # Not very useful, but quite interesting to see that 'pandemic' is the most significant word of 2020.
-
