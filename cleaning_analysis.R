@@ -3,7 +3,7 @@ library(lubridate)
 library(tidytext)
 library(lexicon)
 
-song.data <- read_csv("./datasets/songs_lyrics_short.csv",
+song.data <- read_csv("./datasets/songs_lyrics_labelled.csv",
                       col_names = c(
                         "album",
                         "chart.date",
@@ -36,7 +36,8 @@ song.data.clean <- song.data %>%
 
 view(song.data.clean)
 
-# Function to expand contractions - Look deeper into this
+
+# Function to expand contractions - Look deeper into this. *I used a list of all words to achieve this)
 
 FixContractions <- function(string) {
   string <- str_replace_all(string, "won't", "will not")
@@ -55,15 +56,25 @@ FixContractions <- function(string) {
   return(string)
 }
 
-FixContractions(song.data.clean[[6,4]])
-
-song.data.clean[[6,4]] %>%
-  FixContractions() %>%
-  str_replace_all("[^a-zA-Z0-9\\- ]", " ")
 
 # remove contractions and punctuation
 song.data.clean <- song.data.clean %>%
-  mutate(lyrics = lyrics %>% FixContractions() %>% str_replace_all("[^a-zA-Z0-9\\- ]", " "))
+  mutate(lyrics = lyrics %>% FixContractions() %>% str_replace_all("[^a-zA-Z0-9\\-' ]", " "))
+
+# Get rid of stop words for the basic analyses. Make a list of stop words. HOWEVER - Do NOT apply these when we do n-grams.
+
+# Get a list of all the other contractions, see if they have to be fixed.
+song.data.clean %>%
+  unnest_tokens(word, lyrics) %>%
+  distinct() %>%
+  count(word) %>% 
+  filter(str_detect(word, "'")) %>%
+  arrange(desc(n)) %>%view()
+
+
+
+write_csv(song.data.test, "wordbank.csv") 
+#Made a list of words. Now, go check if they should be in the stopword list.
 
 # Convert chart.dates to lubridate dates
 
@@ -241,3 +252,6 @@ tfidf.words.yearly %>%
   labs(x=NULL)
 
 # Not very useful, but quite interesting to see that 'pandemic' is the most significant word of 2020.
+
+# Next, let's do some feature engineering so we can feed something into our model. (This has been called the hardest part of nlp!!)
+
