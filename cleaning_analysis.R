@@ -59,7 +59,10 @@ FixContractions <- function(string) {
 
 # remove contractions and punctuation
 song.data.clean <- song.data.clean %>%
-  mutate(lyrics = lyrics %>% FixContractions() %>% str_replace_all("[^a-zA-Z0-9\\-' ]", " "))
+  mutate(lyrics = lyrics %>% 
+           FixContractions() %>% 
+           str_replace_all("[^a-zA-Z0-9\\-' ]", " ") %>%
+           str_replace_all("([a-zA-Z])\\1\\1",""))
 
 # Get rid of stop words for the basic analyses. Make a list of stop words. HOWEVER - Do NOT apply these when we do n-grams.
 
@@ -68,7 +71,8 @@ song.data.clean %>%
   unnest_tokens(word, lyrics) %>%
   distinct() %>%
   count(word) %>% 
-  arrange(desc(n)) %>%view()
+  arrange(desc(n)) %>%
+  view()
 
 # Convert chart.dates to lubridate dates
 
@@ -309,4 +313,21 @@ tfidf.words.yearly %>%
   labs(x=NULL)
 
 # Next, let's do some feature engineering so we can feed something into our model. (This has been called the hardest part of nlp!!)
+library(tm)
+
+# Create the corpus
+corpus <- VCorpus(VectorSource(song.data.clean$lyrics))
+# document-term matrix, applying TF-IDF
+dtm <- DocumentTermMatrix(corpus, control = list(weighting= weightTfIdf,
+                                                               stopwords = stop.words,
+                                                               removeNumbers = TRUE,
+                                                               removePunctuation = TRUE))
+# Look at a summary of the dtm
+dtm
+
+# Get a data.frame for modelling
+tfidf.df <- data.frame(as.matrix(dtm), stringsAsFactors = FALSE)
+
+# labels
+labels.df <- data.frame(song.data.clean$love.song)
 
