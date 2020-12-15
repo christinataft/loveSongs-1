@@ -68,13 +68,7 @@ song.data.clean %>%
   unnest_tokens(word, lyrics) %>%
   distinct() %>%
   count(word) %>% 
-  filter(str_detect(word, "'")) %>%
   arrange(desc(n)) %>%view()
-
-
-
-write_csv(song.data.test, "wordbank.csv") 
-#Made a list of words. Now, go check if they should be in the stopword list.
 
 # Convert chart.dates to lubridate dates
 
@@ -83,23 +77,27 @@ song.data.clean <- song.data.clean %>%
          release.date = as_date(release.date))
 
 ## Exploratory data analysis
+# Filter out not yet labelled songs.
+song.data.explore <- song.data.clean %>%
+  filter(!is.na(love.song))
+
 # What percentage of songs charting each year are love songs?
 
-song.data.clean %>%
+song.data.explore %>%
   ggplot(aes(chart.date)) +
   geom_histogram(position = "fill", aes(fill = love.song), bins = 10) # Fix the date labels, change colors
 
 # Amongst songs that turn out to be top 100 songs in the past decade, when are they released? and 
 # how many of them are love songs?
 
-song.data.clean %>%
+song.data.explore%>%
   filter(release.date >= date("01-01-2010")) %>%
   mutate(release.date = update(release.date, year=2010)) %>%
   ggplot(aes(release.date)) +
   geom_histogram(binwidth = (1)) +
   scale_x_date(date_labels="%B", date_breaks = "1 month")
 
-song.data.clean %>%
+song.data.explore %>%
   filter(release.date >= date("01-01-2010")) %>%
   mutate(release.date = update(release.date, year=2010)) %>%
   ggplot(aes(release.date)) +
@@ -109,16 +107,16 @@ song.data.clean %>%
 # Is it possible that releaseing songs at a particular time leads to them being more successful? Probably not.
 # Let's look at the dates with the most top 100 songs:
 
-hot.dates <- song.data.clean %>%
+hot.dates <- song.data.explore %>%
   count(release.date) %>%
   filter(n > 5) %>% .$release.date
 
-song.data.clean %>%
+song.data.explore %>%
   filter(release.date %in% hot.dates) %>% view()
 
 # We can see that they come from largely the same artists. OK, but is there a best month to release albums?
 
-song.data.clean %>%
+song.data.explore %>%
   filter(release.date >= date("01-01-2010")) %>%
   mutate(release.date = update(release.date, year=2010)) %>%
   ggplot(aes(release.date)) +
@@ -128,7 +126,7 @@ song.data.clean %>%
 # For songs that end up charting on the top 100, is there any correlation between them being love songs and the 
 # time of the year they first become popular? 
 # Find a way to group by month!
-song.data.clean %>%
+song.data.explore %>%
   filter(chart.date > date("07-01-2010")) %>% # Take out the first week of jan 2010 because of "spillover from prev year" from last year
   mutate(chart.date = update(chart.date, year=2010)) %>%
   ggplot(aes(chart.date)) +
@@ -138,12 +136,10 @@ song.data.clean %>%
 # Now let's do some visualizations with the words themselves!
 
 # Tokenization with tidy text. Now, each word is present as a row. We will use this in some models (but not all)
-song.data.tidy <- song.data.clean %>%
+song.data.tidy <- song.data.explore %>%
   unnest_tokens(word, lyrics) %>%
   filter(word %in% grady_augmented | word %in% profanity_zac_anger) %>% # Keep only words in the lexicon
-  anti_join(stop_words) %>%
-  distinct() %>% 
-  filter(nchar(word) >= 3)
+  distinct()
 
 # The most popular words, depending on whether they are love songs or not
 
@@ -151,7 +147,7 @@ popular.words <- song.data.tidy %>%
   group_by(love.song) %>%
   count(word, love.song, sort=TRUE) %>%
   mutate(word = reorder_within(word, n, love.song)) %>%
-  filter(rank(desc(n)) <= 20)
+  filter(rank(desc(n)) <= 50)
 
 popular.words %>% view()
 
@@ -188,7 +184,7 @@ word.density <- song.data.tidy %>%
 word.density %>%
   arrange(desc(mean.density)) %>%
   group_by(love.song) %>%
-  filter(rank(desc(mean.density)) <= 20) %>%
+  filter(rank(desc(mean.density)) <= 50) %>%
   mutate(word = reorder_within(word, mean.density, love.song)) %>%
   ggplot(aes(word, mean.density, fill = love.song)) +
   geom_col(show.legend = FALSE) +
@@ -198,7 +194,66 @@ word.density %>%
   scale_y_continuous(expand = c(0,0)) +
   labs(y = "Average density of each word across songs",
        title = "Which words had the highest average density in songs across song types?") 
-# We see roughly the same patterns as before. 
+# We see roughly the same patterns as before, and can use this method to find 
+# Stop words we might want to exclude from our dataset. I exported it as a pdf
+# and used it to find stop words, which are included below.
+
+stop.words <- c(
+  'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s',
+  't','u','v','w','x','y','z','in','the','it','you','on','no','me','at','to','is',
+  'am','and','go','or','do','be','not','my','as','we','all','so','ai','that',
+  'up','oh','now','like','your','one','of','out','yeah','for','got','can','if',
+  'get','are','em','but','know','here','will','every','ever','always',
+  'same','done'
+)
+
+# Now, we can do some visualizations with the dataset excluding stopwords:
+song.data.tidy.2 <- song.data.tidy %>%
+  filter(!word %in% stop.words)
+
+popular.words.2 <- song.data.tidy.2 %>%
+  group_by(love.song) %>%
+  count(word, love.song, sort=TRUE) %>%
+  mutate(word = reorder_within(word, n, love.song)) %>%
+  filter(rank(desc(n)) <= 50)
+
+popular.words.2 %>% view()
+
+popular.words.2 %>%
+  ggplot(aes(word, n, fill = love.song)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~love.song, scales = "free") +
+  coord_flip() +
+  scale_x_reordered() + 
+  scale_y_continuous(expand = c(0,0)) +
+  labs(y = "Total words in all songs",
+       title = "What were the most popular words in love songs and other songs?")
+
+word.density.2 <- song.data.tidy.2 %>%
+  count(word, love.song) %>%
+  group_by(love.song) %>%
+  filter(rank(desc(n)) <= 100) %>% 
+  left_join(song.data.clean) %>%
+  mutate(total.words = str_count(lyrics, boundary("word"))) %>% 
+  mutate(density = str_count(lyrics, word)/total.words) %>%
+  select(love.song, word, density) %>%
+  group_by(word, love.song) %>% 
+  filter(n()>2) %>%
+  summarise(mean.density = mean(density))
+
+word.density.2 %>%
+  arrange(desc(mean.density)) %>%
+  group_by(love.song) %>%
+  filter(rank(desc(mean.density)) <= 50) %>%
+  mutate(word = reorder_within(word, mean.density, love.song)) %>%
+  ggplot(aes(word, mean.density, fill = love.song)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~love.song, scales = "free") +
+  coord_flip() +
+  scale_x_reordered() + 
+  scale_y_continuous(expand = c(0,0)) +
+  labs(y = "Average density of each word across songs",
+       title = "Which words had the highest average density in songs across song types?") 
 
 # Previously, we removed stop words from our dataset and then used term frequency/density as a measure
 # of how significant these words are. A more sophisticated approach is to use TF-IDF
@@ -207,16 +262,18 @@ word.density %>%
 # a document should be given higher weight, unless they also appear in many documents.
 
 tfidf.words <- song.data.clean %>%
+  filter(!is.na(love.song)) %>%
   unnest_tokens(word, lyrics) %>%
   distinct() %>%
   filter(word %in% grady_augmented | word %in% profanity_zac_anger) %>% # Keep only words in the lexicon
+  filter(! word %in% stop.words) %>%
   filter(nchar(word)>3) %>%
-  count(love.song, word, sort=TRUE) %>% 
+  count(love.song, word, sort=TRUE) %>%
   ungroup() %>%
   bind_tf_idf(word, love.song, n)
 # We see that idf and tf-idf are 0 for extremely common words.
 # Now, let's plot important words using TF-IDF by song type
-tfidf.words %>% 
+tfidf.words %>%
   arrange(desc(tf_idf)) %>%
   group_by(love.song) %>%
   filter(rank(desc(tf_idf)) <= 20) %>%
@@ -250,8 +307,6 @@ tfidf.words.yearly %>%
   coord_flip() +
   scale_x_reordered() +
   labs(x=NULL)
-
-# Not very useful, but quite interesting to see that 'pandemic' is the most significant word of 2020.
 
 # Next, let's do some feature engineering so we can feed something into our model. (This has been called the hardest part of nlp!!)
 
