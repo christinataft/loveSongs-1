@@ -331,7 +331,9 @@ tfidf.df <- data.frame(as.matrix(dtm),
 # Add labels
 tfidf.df$song.label <- song.data.clean$love.song
 
-#load mlr3 and algorithms
+#load mlr3 and algorithms. I chose mlr3 because of the ability to train multiple different algorithms at once
+# to find the best one, and quickly do cross validation and resampling, so that more time can be spent on 
+# feature engineering and tweaking features.
 library(mlr3)
 library(mlr3learners)
 
@@ -343,3 +345,19 @@ tfidf.task <- TaskClassif$new(id = "tfidf",
                               backend = tfidf.df, 
                               target = 'song.label')
 
+# set a random forest learner
+learner.rf <- lrn("classif.ranger")
+
+# train-test split of 80:20
+tfidf.train <- sample(tfidf.task$nrow, 0.8*tfidf.task$nrow)
+tfidf.test <- setdiff(seq_len(tfidf.task$nrow), tfidf.train)
+
+# train the model
+learner.rf$train(tfidf.task, row_ids = tfidf.train)
+prediction <- learner.rf$predict(tfidf.task, row_ids = tfidf.test)
+cat("Test Accuracy: ", sum(diag(prediction$confusion))/sum(prediction$confusion))
+
+# We get a 76.5% test accuracy, which is pretty fucking good! Tomorrow, look into how to train multiple models 
+# at once, and then after that look into how to do CV and resampling.
+
+# After that, we can focus on different methods for feature engineering!
