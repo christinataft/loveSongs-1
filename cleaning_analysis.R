@@ -361,3 +361,9 @@ cat("Test Accuracy: ", sum(diag(prediction$confusion))/sum(prediction$confusion)
 # at once, and then after that look into how to do CV and resampling.
 
 # After that, we can focus on different methods for feature engineering!
+
+# Ways to up accuracy - 
+# 1: Increase size of dataset, and get rid of all labelled 2
+# 2: Feature engineering: More sophisticated ones besides tf-idf
+# 3: CV and resampling, picking the right model.
+# 4: If push comes to shove, CNN.
