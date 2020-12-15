@@ -64,9 +64,6 @@ song.data.clean <- song.data.clean %>%
            str_replace_all("[^a-zA-Z0-9\\-' ]", " ") %>%
            str_replace_all("([a-zA-Z])\\1\\1",""))
 
-# Get rid of stop words for the basic analyses. Make a list of stop words. HOWEVER - Do NOT apply these when we do n-grams.
-
-# Get a list of all the other contractions, see if they have to be fixed.
 song.data.clean %>%
   unnest_tokens(word, lyrics) %>%
   distinct() %>%
@@ -125,16 +122,6 @@ song.data.explore %>%
   mutate(release.date = update(release.date, year=2010)) %>%
   ggplot(aes(release.date)) +
   geom_histogram(binwidth = (30)) +
-  scale_x_date(date_labels="%B", date_breaks = "1 month")
-
-# For songs that end up charting on the top 100, is there any correlation between them being love songs and the 
-# time of the year they first become popular? 
-# Find a way to group by month!
-song.data.explore %>%
-  filter(chart.date > date("07-01-2010")) %>% # Take out the first week of jan 2010 because of "spillover from prev year" from last year
-  mutate(chart.date = update(chart.date, year=2010)) %>%
-  ggplot(aes(chart.date)) +
-  geom_histogram(aes(fill=love.song), binwidth = (7)) +
   scale_x_date(date_labels="%B", date_breaks = "1 month")
 
 # Now let's do some visualizations with the words themselves!
@@ -311,6 +298,7 @@ tfidf.words.yearly %>%
   coord_flip() +
   scale_x_reordered() +
   labs(x=NULL)
+# Interesting, but not very useful.
 
 # Next, let's do some feature engineering so we can feed something into our model. (This has been called the hardest part of nlp!!)
 library(tm)
