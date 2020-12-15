@@ -319,15 +319,27 @@ library(tm)
 corpus <- VCorpus(VectorSource(song.data.clean$lyrics))
 # document-term matrix, applying TF-IDF
 dtm <- DocumentTermMatrix(corpus, control = list(weighting= weightTfIdf,
-                                                               stopwords = stop.words,
-                                                               removeNumbers = TRUE,
-                                                               removePunctuation = TRUE))
+                                                            stopwords = stop.words,
+                                                            removeNumbers = TRUE,
+                                                            removePunctuation = TRUE))
 # Look at a summary of the dtm
 dtm
 
 # Get a data.frame for modelling
-tfidf.df <- data.frame(as.matrix(dtm), stringsAsFactors = FALSE)
+tfidf.df <- data.frame(as.matrix(dtm), 
+                       stringsAsFactors = FALSE)
+# Add labels
+tfidf.df$song.label <- song.data.clean$love.song
 
-# labels
-labels.df <- data.frame(song.data.clean$love.song)
+#load mlr3 and algorithms
+library(mlr3)
+library(mlr3learners)
+
+# Drop unlabelled columns
+tfidf.df <- tfidf.df[!is.na(tfidf.df$song.label),]
+
+#Prepare classification task
+tfidf.task <- TaskClassif$new(id = "tfidf", 
+                              backend = tfidf.df, 
+                              target = 'song.label')
 
