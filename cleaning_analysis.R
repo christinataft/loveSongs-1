@@ -357,9 +357,68 @@ prediction$score(measure)
 
 autoplot(prediction, type="roc") # Use this to plot ROC curves when u have 2 variables
 
+# Now, let's use benchmark() to compare different learners and resampling methods
+
+learners <- c("classif.kknn", "classif.naive_bayes", "classif.ranger", "classif.svm", "classif.xgboost")
+learners <- lapply(learners, lrn, predict_sets=c("train", "test"))
+
+#use 3-fold cross validation
+resamplings <- rsmp("cv", folds=3)
+design <- benchmark_grid(tfidf.task, learners, resamplings)
+
+# Evaluate benchmark
+bmr <- benchmark(design)
+
+measures <- list(
+  msr("classif.ce", id = "ce_train", predict_sets = "train"),
+  msr("classif.ce", id = "ce_test")
+)
+
+bmr$aggregate(measures)
+# We using a random forest seems to give us the best results by far - followed by xgboost.
+# However, random forest seems to be overfitting dramatically - we can improve on that by tuning our 
+# parameters.
+
+library(mlr3tuning)
+learner.rf$param_set
+# Set parameters to tune
+library(paradox)
+
+tune_ps <- ParamSet$new(list(
+  ParamInt$new("num.trees", lower=1, upper = 1000),
+  ParamInt$new("max.depth", lower=1, upper = 1000),
+  ParamInt$new("min.node.size", lower=1, upper=1000)
+))
+
+learner.rf$param_set
+
+# Select a performance measure and a resampling strategy
+measure <- msr("classif.ce")
+cv <- rsmp("cv")
+
+# select a budget! We will terminate when tuning does not improve
+evals <- trm("stagnation")
+
+instance <- TuningInstanceSingleCrit$new(
+  task = tfidf.task,
+  learner = learner.rf,
+  resampling = cv,
+  measure = measure,
+  search_space = tune_ps,
+  terminator = evals
+)
+instance
+
+# Next, we need to choose a tuning algorithm. Let's start with random search
+tuner <- tnr("grid_search")
+
+# start the tuning
+tuner$optimize(instance)
+
 # After that, we can focus on different methods for feature engineering!
 # To benchmark - 
 # 1. Features, produce several tasks with different features
 # 2. Models
 # 3. Resampling methods
 
+mlr_measures
