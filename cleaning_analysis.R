@@ -358,9 +358,8 @@ prediction$score(measure)
 autoplot(prediction, type="roc") # Use this to plot ROC curves when u have 2 variables
 
 # After that, we can focus on different methods for feature engineering!
+# To benchmark - 
+# 1. Features, produce several tasks with different features
+# 2. Models
+# 3. Resampling methods
 
-# Ways to up accuracy - 
-# 1: Increase size of dataset, and get rid of all labelled 2
-# 2: Feature engineering: More sophisticated ones besides tf-idf
-# 3: CV and resampling, picking the right model.
-# 4: If push comes to shove, CNN.
