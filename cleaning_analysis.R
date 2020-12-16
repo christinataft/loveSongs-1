@@ -313,6 +313,10 @@ dtm <- DocumentTermMatrix(corpus, control = list(weighting= weightTfIdf,
 # Look at a summary of the dtm
 dtm
 
+# Reduce sparsity to GREATLY improve performance by reducing dimensionality. This takes out terms that are 
+# only present in 0.5% of documents.
+dtm <- removeSparseTerms(dtm, 0.995)
+
 # Get a data.frame for modelling
 tfidf.df <- data.frame(as.matrix(dtm), 
                        stringsAsFactors = FALSE)
@@ -324,6 +328,7 @@ tfidf.df$song.label <- song.data.clean$love.song
 # feature engineering and tweaking features.
 library(mlr3)
 library(mlr3learners)
+library(mlr3viz)
 
 # Drop unlabelled columns
 tfidf.df <- tfidf.df[!is.na(tfidf.df$song.label),]
@@ -343,10 +348,14 @@ tfidf.test <- setdiff(seq_len(tfidf.task$nrow), tfidf.train)
 # train the model
 learner.rf$train(tfidf.task, row_ids = tfidf.train)
 prediction <- learner.rf$predict(tfidf.task, row_ids = tfidf.test)
-cat("Test Accuracy: ", sum(diag(prediction$confusion))/sum(prediction$confusion))
 
-# We get a 76.5% test accuracy, which is pretty fucking good! Tomorrow, look into how to train multiple models 
-# at once, and then after that look into how to do CV and resampling.
+# Get test accuracy
+measure = msr("classif.acc")
+prediction$score(measure)
+
+# We get ~76% test accuracy using random forests.
+
+autoplot(prediction, type="roc") # Use this to plot ROC curves when u have 2 variables
 
 # After that, we can focus on different methods for feature engineering!
 
