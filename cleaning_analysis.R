@@ -306,20 +306,20 @@ library(tm)
 # Create the corpus
 corpus <- VCorpus(VectorSource(song.data.clean$lyrics))
 # document-term matrix, applying TF-IDF
-dtm <- DocumentTermMatrix(corpus, control = list(weighting= weightTfIdf,
+tfidf.dtm <- DocumentTermMatrix(corpus, control = list(weighting= weightTfIdf,
                                                             stopwords = stop.words,
                                                             removeNumbers = TRUE,
                                                             removePunctuation = TRUE,
                                                  stemming=TRUE))
 # Look at a summary of the dtm
-dtm
+tfidf.dtm
 
 # Reduce sparsity to GREATLY improve performance by reducing dimensionality. This takes out terms that are 
 # only present in 0.5% of documents.
-dtm <- removeSparseTerms(dtm, 0.995)
+tfidf.dtm <- removeSparseTerms(tfidf.dtm, 0.995)
 
 # Get a data.frame for modelling
-tfidf.df <- data.frame(as.matrix(dtm), 
+tfidf.df <- data.frame(as.matrix(tfidf.dtm), 
                        stringsAsFactors = FALSE)
 # Add labels
 tfidf.df$song.label <- song.data.clean$love.song
@@ -429,15 +429,15 @@ BigramTokenizer <- function(x){
 }
 
 # Make bigrams document term matrix
-dtm.bigrams <- DocumentTermMatrix(corpus, control = list(tokenize = BigramTokenizer))
+bigrams.dtm <- DocumentTermMatrix(corpus, control = list(tokenize = BigramTokenizer))
 
 # We have a sparsity of 100%. Let's take out bigrams that are only present in 1% of the songs. ( we can tweak this)
-dtm.bigrams <- removeSparseTerms(dtm.bigrams, 0.99)
+bigrams.dtm <- removeSparseTerms(bigrams.dtm, 0.99)
 
-dtm.bigrams # Now, we only have 97% sparsity!
+bigrams.dtm # Now, we only have 97% sparsity!
 
 # Get df
-bigrams.df <- data.frame(as.matrix(dtm.bigrams), 
+bigrams.df <- data.frame(as.matrix(bigrams.dtm), 
                        stringsAsFactors = FALSE)
 # Add labels
 bigrams.df$song.label <- song.data.clean$love.song
@@ -551,8 +551,92 @@ tuner <- tnr("grid_search")
 # start the tuning
 tuner$optimize(instance)
 
+# Try with trigrams!
+TrigramTokenizer <- function(x){
+  unlist(lapply(ngrams(words(x), 3), paste, collapse = " "), use.names = FALSE)
+}
 
-# NExt - word2vec embeddings with text2vec
+# Make trigrams document term matrix
+trigrams.dtm <- DocumentTermMatrix(corpus, control = list(tokenize = TrigramTokenizer))
+
+# We have a sparsity of 100%. Let's take out bigrams that are only present in 1% of the songs. ( we can tweak this)
+trigrams.dtm <- removeSparseTerms(trigrams.dtm, 0.99)
+
+trigrams.dtm # Now, we only have 97% sparsity!
+
+# Get df
+trigrams.df <- data.frame(as.matrix(trigrams.dtm), 
+                         stringsAsFactors = FALSE)
+
+trigrams.df
+
+# Add labels
+trigrams.df$song.label <- song.data.clean$love.song
+
+# Drop unlabelled columns
+trigrams.df <- trigrams.df[!is.na(trigrams.df$song.label),]
+
+trigrams.df
+
+trigrams.task <- TaskClassif$new(id = "trigrams", 
+                                backend = trigrams.df, 
+                                target = 'song.label')
+# Tuned learner
+trigrams.autotuner <- AutoTuner$new(
+  learner = lrn("classif.ranger"),
+  resampling = rsmp("holdout"),
+  measure = msr("classif.ce"),
+  search_space = ParamSet$new(list(
+    ParamInt$new("num.trees", lower=1, upper = 5000),
+    ParamInt$new("max.depth", lower=1, upper = 1000),
+    ParamInt$new("min.node.size", lower=1, upper=1000)
+  )),
+  terminator = trm("stagnation"),
+  tuner = tnr("grid_search")
+)
+
+# Benchmark tuned learner against a default value learner
+trigrams.grid = benchmark_grid(
+  task = trigrams.task,
+  learner = list(trigrams.autotuner, lrn("classif.ranger")),
+  resampling = rsmp("cv", folds = 3)
+)
+
+bmr = benchmark(trigrams.grid)
+bmr$aggregate(msrs("classif.ce"))
+# We see that the tuned model has MARGINALLY better accuracy than an untuned model, and they both do worse than bigrams!
+
+## Next, we try word2vec. Word2vec involves training a model on a dataset, which will then convert these 
+## Words to vectors
+
+library(word2vec)
+
+# First, train the word2vec model
+word2vec.train <- txt_clean_word2vec(song.data.clean$lyrics)
+word2vec.model <- word2vec(word2vec.train, stopwords = stop.words)
+
+summary(word2vec.model, type="vocabulary")
+
+# Word2vec should allow us to find similar words. Let's find word embeddings and nearest neighbours
+embeddings <- as.matrix(word2vec.model)
+nearestneighbours <- predict(word2vec.model, c("hate", "love"), type="nearest", top_n=10)
+nearestneighbours
+# We can see how word2vec finds similar terms 
+
+# Prepare data frame for doc2vec
+
+doc2vec.df <- song.data.clean[, c('song.title', 'lyrics')]
+stop.regex <- str_c("(?=(",str_c(stop.words, collapse="|"),"))")
+stop.regex ## Implement this eventuall!
+
+doc2vec.df <- doc2vec.df %>%
+  rename(doc_id = song.title,
+         text = lyrics) %>%
+  mutate(text = txt_clean_word2vec(text))
+
+doc2vec.df <- doc2vec(word2vec.model, doc2vec.df)
+
+doc2vec.df
 
 # After that, we can focus on different methods for feature engineering!
 # To benchmark - 
