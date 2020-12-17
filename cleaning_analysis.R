@@ -190,7 +190,7 @@ word.density %>%
 # and used it to find stop words, which are included below.
 
 stop.words <- c(
-  'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s',
+  'a','b','c','d','e','f','g','h','j','k','l','m','n','o','p','q','r','s',
   't','u','v','w','x','y','z','in','the','it','you','on','no','me','at','to','is',
   'am','and','go','or','do','be','not','my','as','we','all','so','ai','that',
   'up','oh','now','like','your','one','of','out','yeah','for','got','can','if',
@@ -309,7 +309,8 @@ corpus <- VCorpus(VectorSource(song.data.clean$lyrics))
 dtm <- DocumentTermMatrix(corpus, control = list(weighting= weightTfIdf,
                                                             stopwords = stop.words,
                                                             removeNumbers = TRUE,
-                                                            removePunctuation = TRUE))
+                                                            removePunctuation = TRUE,
+                                                 stemming=TRUE))
 # Look at a summary of the dtm
 dtm
 
@@ -353,7 +354,7 @@ prediction <- learner.rf$predict(tfidf.task, row_ids = tfidf.test)
 measure = msr("classif.acc")
 prediction$score(measure)
 
-# We get ~76% test accuracy using random forests.
+# We get ~81% test accuracy using random forests.
 
 autoplot(prediction, type="roc") # Use this to plot ROC curves when u have 2 variables
 
@@ -385,8 +386,8 @@ learner.rf$param_set
 library(paradox)
 
 tune_ps <- ParamSet$new(list(
-  ParamInt$new("num.trees", lower=1, upper = 1000),
-  ParamInt$new("max.depth", lower=1, upper = 1000),
+  ParamInt$new("num.trees", lower=1, upper = 5000),
+  ParamInt$new("max.depth", lower=1, upper = 32),
   ParamInt$new("min.node.size", lower=1, upper=1000)
 ))
 
@@ -394,7 +395,7 @@ learner.rf$param_set
 
 # Select a performance measure and a resampling strategy
 measure <- msr("classif.ce")
-cv <- rsmp("cv")
+hout <- rsmp("holdout")
 
 # select a budget! We will terminate when tuning does not improve
 evals <- trm("stagnation")
@@ -402,18 +403,156 @@ evals <- trm("stagnation")
 instance <- TuningInstanceSingleCrit$new(
   task = tfidf.task,
   learner = learner.rf,
-  resampling = cv,
+  resampling = hout,
   measure = measure,
   search_space = tune_ps,
   terminator = evals
 )
 instance
 
-# Next, we need to choose a tuning algorithm. Let's start with random search
+# Next, we need to choose a tuning algorithm. Let's start with grid search
 tuner <- tnr("grid_search")
 
 # start the tuning
 tuner$optimize(instance)
+
+# Looks like we can reach 78% test accuracy with a combination of tf-idf and random forests
+
+# Let's try different methods for feature engineering - may allow us to extract information otherwise lost
+# using word counts
+
+## Bigrams
+
+# Function to tokenize bigrams
+BigramTokenizer <- function(x){
+  unlist(lapply(ngrams(words(x), 2), paste, collapse = " "), use.names = FALSE)
+}
+
+# Make bigrams document term matrix
+dtm.bigrams <- DocumentTermMatrix(corpus, control = list(tokenize = BigramTokenizer))
+
+# We have a sparsity of 100%. Let's take out bigrams that are only present in 1% of the songs. ( we can tweak this)
+dtm.bigrams <- removeSparseTerms(dtm.bigrams, 0.99)
+
+dtm.bigrams # Now, we only have 97% sparsity!
+
+# Get df
+bigrams.df <- data.frame(as.matrix(dtm.bigrams), 
+                       stringsAsFactors = FALSE)
+# Add labels
+bigrams.df$song.label <- song.data.clean$love.song
+
+# Drop unlabelled columns
+bigrams.df <- bigrams.df[!is.na(bigrams.df$song.label),]
+
+bigrams.df
+
+bigrams.task <- TaskClassif$new(id = "bigrams", 
+                              backend = bigrams.df, 
+                              target = 'song.label')
+
+# naive bayes to try out
+learner.nb <- lrn("classif.naive_bayes")
+
+# train-test split of 80:20
+bigrams.train <- sample(bigrams.task$nrow, 0.8*bigrams.task$nrow)
+bigrams.test <- setdiff(seq_len(bigrams.task$nrow), bigrams.train)
+
+# train the model
+learner.nb$train(bigrams.task, row_ids = bigrams.train)
+prediction <- learner.nb$predict(bigrams.task, row_ids = bigrams.test)
+
+# Get test accuracy
+measure = msr("classif.acc")
+prediction$score(measure)
+# LOL we get 48 % accuracy which is worse than chance. nevermind, try with a bunch of different models.
+
+learners <- c("classif.kknn", "classif.naive_bayes", "classif.ranger", "classif.svm", "classif.xgboost")
+learners <- lapply(learners, lrn, predict_sets=c("train", "test"))
+
+#use 3-fold cross validation
+resamplings <- rsmp("cv", folds=3)
+design <- benchmark_grid(bigrams.task, learners, resamplings)
+
+# Evaluate benchmark
+bmr <- benchmark(design)
+
+measures <- list(
+  msr("classif.ce", id = "ce_train", predict_sets = "train"),
+  msr("classif.ce", id = "ce_test")
+)
+
+bmr$aggregate(measures)
+
+# Random forest still gives us the best test accuracy at 78%.
+# What if we reduce the sparsity?
+bigrams.df.95 <- corpus %>%
+  DocumentTermMatrix(control = list(tokenize = BigramTokenizer)) %>%
+  removeSparseTerms(0.95) %>%
+  as.matrix() %>%
+  data.frame(stringsAsFactors = FALSE)
+bigrams.df.95$song.label <- song.data.clean$love.song
+bigrams.df.95 <- bigrams.df.95[!is.na(bigrams.df.95$song.label),]
+
+bigrams.df.90 <- corpus %>%
+  DocumentTermMatrix(control = list(tokenize = BigramTokenizer)) %>%
+  removeSparseTerms(0.90) %>%
+  as.matrix() %>%
+  data.frame(stringsAsFactors = FALSE)
+bigrams.df.90$song.label <- song.data.clean$love.song
+bigrams.df.90 <- bigrams.df.90[!is.na(bigrams.df.90$song.label),]
+
+task.bigrams.90 <- TaskClassif$new(id="bigrams90", bigrams.df.90, "song.label")
+task.bigrams.95 <- TaskClassif$new(id="bigrams95", bigrams.df.95, "song.label")
+
+learner.rf <- lrn("classif.ranger")
+resampling <- rsmp("cv", folds = 3L)
+
+rr90 <- resample(task.bigrams.90, learner.rf, resampling)
+rr90$aggregate(msr("classif.ce"))
+rr95 <- resample(task.bigrams.90, learner.rf, resampling)
+rr95$aggregate(msr("classif.ce"))
+
+# train the model
+learner.rf$train(tfidf.task, row_ids = tfidf.train)
+prediction <- learner.rf$predict(tfidf.task, row_ids = tfidf.test)
+
+# Get test accuracy
+measure = msr("classif.acc")
+prediction$score(measure)
+
+# It seems we get a nice balance of performance and accuracy with our 97% sparsity. Now,we can tune parameters
+# for our random forest
+
+tune_ps <- ParamSet$new(list(
+  ParamInt$new("num.trees", lower=1, upper = 5000),
+  ParamInt$new("max.depth", lower=1, upper = 32),
+  ParamInt$new("min.node.size", lower=1, upper=1000)
+))
+
+# Select a performance measure and a resampling strategy
+measure <- msr("classif.ce")
+hout <- rsmp("holdout")
+
+# select a budget! We will terminate when tuning does not improve
+evals <- trm("stagnation")
+
+instance <- TuningInstanceSingleCrit$new(
+  task = bigrams.task,
+  learner = learner.rf,
+  resampling = hout,
+  measure = measure,
+  search_space = tune_ps,
+  terminator = evals
+)
+
+tuner <- tnr("grid_search")
+
+# start the tuning
+tuner$optimize(instance)
+
+
+# NExt - word2vec embeddings with text2vec
 
 # After that, we can focus on different methods for feature engineering!
 # To benchmark - 
@@ -422,3 +561,5 @@ tuner$optimize(instance)
 # 3. Resampling methods
 
 mlr_measures
+dtm.bigrams <- DocumentTermMatrix(corpus, control = list(tokenize = BigramTokenizer))
+dtm.bigrams <- 
