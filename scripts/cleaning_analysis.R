@@ -198,7 +198,7 @@ stop.words <- c(
   'am','and','go','or','do','be','not','my','as','we','all','so','ai','that',
   'up','oh','now','like','your','one','of','out','yeah','for','got','can','if',
   'get','are','em','but','know','here','will','every','ever','always',
-  'same','done'
+  'same','done','with','just','have','this','when','because'
 )
 
 # Now, we can do some visualizations with the dataset excluding stopwords:
