@@ -9,7 +9,6 @@ print(songData)
 
 allSongData=pd.DataFrame()
 
-
 api = lyricsgenius.Genius(# Insert your genius api key here ,
     sleep_time=0.01, verbose=False)
 
