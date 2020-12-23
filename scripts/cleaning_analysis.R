@@ -85,11 +85,21 @@ write_csv(song.data.clean, "datasets/song_data_clean.csv", col_names = TRUE)
 song.data.explore <- song.data.clean %>%
   filter(!is.na(love.song))
 
+library(RColorBrewer)
+
 # What percentage of songs charting each year are love songs?
 
+install.packages("RColorBrewer")
+
 song.data.explore %>%
-  ggplot(aes(chart.date)) +
-  geom_histogram(position = "fill", aes(fill = love.song), bins = 10) # Fix the date labels, change colors
+  count(year = year(chart.date), love.song) %>%
+  mutate(love.song = if_else(love.song==0, "No", "Yes")) %>%
+  ggplot(aes(year, n)) +
+  geom_bar(stat = "identity", position = "fill", aes(fill = love.song)) + 
+  labs(x = "Year", y = "Proportion", fill = "Love Song", title = "Yearly proportion of top-100 songs by song category") +
+  scale_x_continuous(breaks = c(2010:2020)) + 
+  scale_fill_brewer(palette = "PuRd") + 
+  theme_dark()
 
 # Amongst songs that turn out to be top 100 songs in the past decade, when are they released? and 
 # how many of them are love songs?
@@ -122,10 +132,14 @@ song.data.explore %>%
 
 song.data.explore %>%
   filter(release.date >= date("01-01-2010")) %>%
-  mutate(release.date = update(release.date, year=2010)) %>%
-  ggplot(aes(release.date)) +
-  geom_histogram(binwidth = (30)) +
-  scale_x_date(date_labels="%B", date_breaks = "1 month")
+  count(month = factor(month(release.date))) %>%
+  ggplot(aes(month, n, fill=month)) +
+  geom_bar(stat = "identity") + 
+  scale_x_discrete("Month", labels = month(c(1:12), label = TRUE)) + 
+  labs(y = "Count", title = "Number of top 100 hits per month across 10 years") +
+  scale_fill_brewer(palette = "Set3") +
+  theme_dark() +
+  theme(legend.position = "none")
 
 # Now let's do some visualizations with the words themselves!
 
@@ -141,7 +155,8 @@ popular.words <- song.data.tidy %>%
   group_by(love.song) %>%
   count(word, love.song, sort=TRUE) %>%
   mutate(word = reorder_within(word, n, love.song)) %>%
-  filter(rank(desc(n)) <= 50)
+  filter(rank(desc(n)) <= 45) %>%
+  mutate(love.song = if_else(love.song == 0, "Other Songs", "Love Songs"))
 
 popular.words %>% view()
 
@@ -152,8 +167,11 @@ popular.words %>%
   coord_flip() +
   scale_x_reordered() + 
   scale_y_continuous(expand = c(0,0)) +
-  labs(y = "Total words in all songs",
-       title = "What were the most popular words in love songs and other songs?")
+  labs(y = "Count",
+       title = "What were the most popular words in love songs and other songs?") +
+  scale_fill_brewer(palette = "PuRd") + 
+  theme_dark()
+
 # Wee see some patterns here which are good! Love songs tend to have fewer explicit words. 
 # However, the popular words in love songs tend to be popular in non-love songs as well.
 # We see alot of words like n***a in the non-love songs - It's probably because rap music tends to be much
@@ -178,8 +196,9 @@ word.density <- song.data.tidy %>%
 word.density %>%
   arrange(desc(mean.density)) %>%
   group_by(love.song) %>%
-  filter(rank(desc(mean.density)) <= 50) %>%
+  filter(rank(desc(mean.density)) <= 45) %>%
   mutate(word = reorder_within(word, mean.density, love.song)) %>%
+  mutate(love.song = if_else(love.song == 0, "Other Songs", "Love Songs")) %>%
   ggplot(aes(word, mean.density, fill = love.song)) +
   geom_col(show.legend = FALSE) +
   facet_wrap(~love.song, scales = "free") +
@@ -187,13 +206,15 @@ word.density %>%
   scale_x_reordered() + 
   scale_y_continuous(expand = c(0,0)) +
   labs(y = "Average density of each word across songs",
-       title = "Which words had the highest average density in songs across song types?") 
+       title = "Which words had the highest average density in songs across song types?") + 
+  scale_fill_brewer(palette = "PuBu") + 
+  theme_dark()
 # We see roughly the same patterns as before, and can use this method to find 
 # Stop words we might want to exclude from our dataset. I exported it as a pdf
 # and used it to find stop words, which are included below.
 
 stop.words <- c(
-  'a','b','c','d','e','f','g','h','j','k','l','m','n','o','p','q','r','s',
+  'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s',
   't','u','v','w','x','y','z','in','the','it','you','on','no','me','at','to','is',
   'am','and','go','or','do','be','not','my','as','we','all','so','ai','that',
   'up','oh','now','like','your','one','of','out','yeah','for','got','can','if',
@@ -238,8 +259,9 @@ word.density.2 <- song.data.tidy.2 %>%
 word.density.2 %>%
   arrange(desc(mean.density)) %>%
   group_by(love.song) %>%
-  filter(rank(desc(mean.density)) <= 50) %>%
+  filter(rank(desc(mean.density)) <= 45) %>%
   mutate(word = reorder_within(word, mean.density, love.song)) %>%
+  mutate(love.song = if_else(love.song == 0, "Other Songs", "Love Songs")) %>%
   ggplot(aes(word, mean.density, fill = love.song)) +
   geom_col(show.legend = FALSE) +
   facet_wrap(~love.song, scales = "free") +
@@ -247,7 +269,9 @@ word.density.2 %>%
   scale_x_reordered() + 
   scale_y_continuous(expand = c(0,0)) +
   labs(y = "Average density of each word across songs",
-       title = "Which words had the highest average density in songs across song types?") 
+       title = "Which words had the highest average density in songs across song types?") +
+  scale_fill_brewer(palette = "RdPu") + 
+  theme_dark()
 
 # Previously, we removed stop words from our dataset and then used term frequency/density as a measure
 # of how significant these words are. A more sophisticated approach is to use TF-IDF
