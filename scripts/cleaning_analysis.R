@@ -326,3 +326,4 @@ tfidf.words.yearly %>%
   scale_x_reordered() +
   labs(x=NULL)
 # Interesting, but not very useful.
+
